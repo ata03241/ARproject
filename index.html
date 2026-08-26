@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>AR Menu — Proof of Concept</title>
+
+<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  a-scene {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* --- Overlay UI (ingredient card, status banner) --- */
+  #status-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    padding: 14px 16px calc(14px + env(safe-area-inset-top));
+    background: linear-gradient(180deg, rgba(0,0,0,0.75), rgba(0,0,0,0));
+    color: #fff;
+    text-align: center;
+    font-size: 14px;
+    letter-spacing: 0.02em;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+  }
+  #status-banner.hidden { opacity: 0; }
+
+  #ingredient-card {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    z-index: 20;
+    background: rgba(20, 18, 16, 0.88);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: #f5efe6;
+    border-radius: 18px;
+    padding: 16px 18px;
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.35s ease, transform 0.35s ease;
+    pointer-events: none;
+  }
+  #ingredient-card.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  #ingredient-card h2 {
+    margin: 0 0 6px;
+    font-size: 17px;
+    font-weight: 600;
+    color: #f0b866;
+  }
+  #ingredient-card p {
+    margin: 0;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: #e6ddcf;
+  }
+  #ingredient-card .allergens {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #c9a37a;
+  }
+
+  #boot-notice {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: #0c0b0a;
+    color: #f5efe6;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    text-align: center;
+    gap: 12px;
+  }
+  #boot-notice h1 {
+    font-size: 20px;
+    margin: 0 0 4px;
+  }
+  #boot-notice p {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #b9ada0;
+    max-width: 320px;
+  }
+  #boot-notice button {
+    margin-top: 12px;
+    padding: 12px 28px;
+    border-radius: 999px;
+    border: none;
+    background: #f0b866;
+    color: #201a12;
+    font-size: 15px;
+    font-weight: 600;
+  }
+</style>
+</head>
+
+<body>
+
+  <!-- Simple gate so camera permission is requested on a deliberate tap, not page load -->
+  <div id="boot-notice">
+    <h1>AR Menu — Proof of Concept</h1>
+    <p>
+      Point your camera at the printed target image (see README for the test image).
+      A video should appear layered on top of it.
+    </p>
+    <button id="start-btn">Start camera</button>
+  </div>
+
+  <div id="status-banner" class="hidden">Looking for the dish photo…</div>
+
+  <div id="ingredient-card">
+    <h2 id="dish-name">Dish name</h2>
+    <p id="dish-ingredients">Ingredients will appear here.</p>
+    <div class="allergens" id="dish-allergens"></div>
+  </div>
+
+  <a-scene
+    id="ar-scene"
+    mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiScanning: no; uiLoading: no;"
+    color-space="sRGB"
+    renderer="colorManagement: true, physicallyCorrectLights"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false"
+    embedded
+  >
+    <a-assets>
+      <video
+        id="dish-video"
+        src="./dish.mp4"
+        preload="auto"
+        loop
+        muted
+        playsinline
+        webkit-playsinline
+        crossorigin="anonymous"
+      ></video>
+    </a-assets>
+
+    <a-camera position="0 0 0" look-controls="enabled: false" cursor="fuse: false;"></a-camera>
+
+    <!-- targetIndex 0 = the first (and only, for this POC) trained image -->
+    <a-entity id="target-0" mindar-image-target="targetIndex: 0">
+      <!-- width/height ratio should roughly match your printed photo's aspect ratio -->
+      <a-video src="#dish-video" width="1" height="0.75" position="0 0 0" rotation="0 0 0"></a-video>
+    </a-entity>
+  </a-scene>
+
+  <script>
+    const bootNotice = document.getElementById('boot-notice');
+    const startBtn = document.getElementById('start-btn');
+    const statusBanner = document.getElementById('status-banner');
+    const ingredientCard = document.getElementById('ingredient-card');
+    const sceneEl = document.getElementById('ar-scene');
+    const video = document.getElementById('dish-video');
+
+    // Example dish data — in the real product this comes from your ASP.NET Core API
+    const DISH = {
+      name: 'Grillad lax med citron',
+      ingredients: 'Norsk lax, citron, dill, smör, färskpotatis, rostad sparris.',
+      allergens: 'Innehåller: fisk. Kan innehålla spår av mjölk.'
+    };
+    document.getElementById('dish-name').textContent = DISH.name;
+    document.getElementById('dish-ingredients').textContent = DISH.ingredients;
+    document.getElementById('dish-allergens').textContent = DISH.allergens;
+
+    startBtn.addEventListener('click', () => {
+      bootNotice.style.display = 'none';
+      statusBanner.classList.remove('hidden');
+
+      sceneEl.addEventListener('renderstart', () => {
+        const arSystem = sceneEl.systems['mindar-image-system'];
+        arSystem.start(); // starts camera + tracking after user gesture
+      });
+
+      // If the scene already rendered before we attached the listener
+      if (sceneEl.hasLoaded) {
+        const arSystem = sceneEl.systems['mindar-image-system'];
+        arSystem.start();
+      }
+    });
+
+    const targetEntity = document.getElementById('target-0');
+
+    targetEntity.addEventListener('targetFound', () => {
+      statusBanner.classList.add('hidden');
+      ingredientCard.classList.add('visible');
+      video.currentTime = 0;
+      video.play().catch(() => {
+        // Autoplay can be blocked until a user gesture; the Start button tap covers this in most browsers
+      });
+    });
+
+    targetEntity.addEventListener('targetLost', () => {
+      statusBanner.classList.remove('hidden');
+      ingredientCard.classList.remove('visible');
+      video.pause();
+    });
+  </script>
+</body>
+</html>
